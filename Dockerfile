@@ -22,5 +22,5 @@ COPY /data/DejaVuSans.ttf /usr/share/fonts/truetype/
 
 EXPOSE 7860
 
-COPY ./entrypoint.sh /sd/
+COPY . /sd/
 ENTRYPOINT /sd/entrypoint.sh
