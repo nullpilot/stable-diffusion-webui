@@ -1,6 +1,3 @@
-docker-compose.yml
-Dockerfile
-
-.git
-.git*
-.idea
+outputs/
+src/
+configs/webui/userconfig_streamlit.yaml
