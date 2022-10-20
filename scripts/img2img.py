@@ -49,7 +49,7 @@ def img2img(prompt: str = '', init_info: any = None, init_info_mask: any = None,
 	    mask_restore: bool = False, ddim_steps: int = 50, sampler_name: str = 'DDIM',
 	    n_iter: int = 1,  cfg_scale: float = 7.5, denoising_strength: float = 0.8,
 	    seed: int = -1, noise_mode: int = 0, find_noise_steps: str = "", height: int = 512, width: int = 512, resize_mode: int = 0, fp = None,
-	    variant_amount: float = None, variant_seed: int = None, ddim_eta:float = 0.0,
+	    variant_amount: float = 0.0, variant_seed: int = None, ddim_eta:float = 0.0,
 	    write_info_files:bool = True, separate_prompts:bool = False, normalize_prompt_weights:bool = True,
 	    save_individual_images: bool = True, save_grid: bool = True, group_by_prompt: bool = True,
 	    save_as_jpg: bool = True, use_GFPGAN: bool = True, GFPGAN_model: str = 'GFPGANv1.4',
@@ -202,7 +202,7 @@ def img2img(prompt: str = '', init_info: any = None, init_info_mask: any = None,
 			samples_ddim = K.sampling.__dict__[f'sample_{sampler.get_sampler_name()}'](model_wrap_cfg, xi, sigma_sched,
 												   extra_args={'cond': conditioning, 'uncond': unconditional_conditioning,
 													       'cond_scale': cfg_scale, 'mask': z_mask, 'x0': x0, 'xi': xi}, disable=False,
-												   callback=generation_callback)
+												   callback=generation_callback if not server_state["bridge"] else None)
 		else:
 
 			x0, z_mask = init_data
@@ -234,7 +234,7 @@ def img2img(prompt: str = '', init_info: any = None, init_info_mask: any = None,
 			from skimage import exposure
 			do_color_correction = True
 		except:
-			print("Install scikit-image to perform color correction on loopback")
+			logger.error("Install scikit-image to perform color correction on loopback")
 
 		for i in range(n_iter):
 			if do_color_correction and i == 0:
@@ -365,7 +365,7 @@ def layout():
 		img2img_input_col, img2img_generate_col = st.columns([10,1])
 		with img2img_input_col:
 			#prompt = st.text_area("Input Text","")
-			prompt = st.text_input("Input Text","", placeholder="A corgi wearing a top hat as an oil painting.")
+			prompt = st.text_area("Input Text","", placeholder="A corgi wearing a top hat as an oil painting.")
 
 		# Every form must have a submit button, the extra blank spaces is a temp way to align it with the input field. Needs to be done in CSS or some other way.
 		img2img_generate_col.write("")
@@ -405,23 +405,23 @@ def layout():
 									   value=st.session_state['defaults'].img2img.height.value, step=st.session_state['defaults'].img2img.height.step)
 			seed = st.text_input("Seed:", value=st.session_state['defaults'].img2img.seed, help=" The seed to use, if left blank a random seed will be generated.")
 
-			cfg_scale = st.slider("CFG (Classifier Free Guidance Scale):", min_value=st.session_state['defaults'].img2img.cfg_scale.min_value,
-											  max_value=st.session_state['defaults'].img2img.cfg_scale.max_value, value=st.session_state['defaults'].img2img.cfg_scale.value,
-											  step=st.session_state['defaults'].img2img.cfg_scale.step, help="How strongly the image should follow the prompt.")
+			cfg_scale = st.number_input("CFG (Classifier Free Guidance Scale):", min_value=st.session_state['defaults'].img2img.cfg_scale.min_value,
+					      step=st.session_state['defaults'].img2img.cfg_scale.step,
+					      help="How strongly the image should follow the prompt.")
 
 			st.session_state["denoising_strength"] = st.slider("Denoising Strength:", value=st.session_state['defaults'].img2img.denoising_strength.value,
-																		   min_value=st.session_state['defaults'].img2img.denoising_strength.min_value,
-														   max_value=st.session_state['defaults'].img2img.denoising_strength.max_value,
-														   step=st.session_state['defaults'].img2img.denoising_strength.step)
+									   min_value=st.session_state['defaults'].img2img.denoising_strength.min_value,
+									   max_value=st.session_state['defaults'].img2img.denoising_strength.max_value,
+									   step=st.session_state['defaults'].img2img.denoising_strength.step)
 
 
 			mask_expander = st.empty()
 			with mask_expander.expander("Mask"):
 				mask_mode_list = ["Mask", "Inverted mask", "Image alpha"]
 				mask_mode = st.selectbox("Mask Mode", mask_mode_list,
-									 help="Select how you want your image to be masked.\"Mask\" modifies the image where the mask is white.\n\
-									 \"Inverted mask\" modifies the image where the mask is black. \"Image alpha\" modifies the image where the image is transparent."
-									 )
+							 help="Select how you want your image to be masked.\"Mask\" modifies the image where the mask is white.\n\
+							 \"Inverted mask\" modifies the image where the mask is black. \"Image alpha\" modifies the image where the image is transparent."
+							 )
 				mask_mode = mask_mode_list.index(mask_mode)
 
 
@@ -431,24 +431,26 @@ def layout():
 							help=""
 						)
 				noise_mode = noise_mode_list.index(noise_mode)
-				find_noise_steps = st.slider("Find Noise Steps", value=st.session_state['defaults'].img2img.find_noise_steps.value,
-											 min_value=st.session_state['defaults'].img2img.find_noise_steps.min_value, max_value=st.session_state['defaults'].img2img.find_noise_steps.max_value,
+				find_noise_steps = st.number_input("Find Noise Steps", value=st.session_state['defaults'].img2img.find_noise_steps.value,
+											 min_value=st.session_state['defaults'].img2img.find_noise_steps.min_value,
 											 step=st.session_state['defaults'].img2img.find_noise_steps.step)
 
 			with st.expander("Batch Options"):
-				st.session_state["batch_count"] = int(st.text_input("Batch count.", value=st.session_state['defaults'].img2img.batch_count.value,
-																help="How many iterations or batches of images to generate in total."))
+				st.session_state["batch_count"] = st.number_input("Batch count.", value=st.session_state['defaults'].img2img.batch_count.value,
+										  help="How many iterations or batches of images to generate in total.")
 
-				st.session_state["batch_size"] = int(st.text_input("Batch size", value=st.session_state.defaults.img2img.batch_size.value,
-				                            help="How many images are at once in a batch.\
-				                            It increases the VRAM usage a lot but if you have enough VRAM it can reduce the time it takes to finish generation as more images are generated at once.\
-                                            Default: 1"))
+				st.session_state["batch_size"] = st.number_input("Batch size", value=st.session_state.defaults.img2img.batch_size.value,
+										 help="How many images are at once in a batch.\
+										 It increases the VRAM usage a lot but if you have enough VRAM it can reduce the time it takes to finish generation as more images are generated at once.\
+										 Default: 1")
 
 			with st.expander("Preview Settings"):
 				st.session_state["update_preview"] = st.session_state["defaults"].general.update_preview
-				st.session_state["update_preview_frequency"] = st.text_input("Update Image Preview Frequency", value=st.session_state['defaults'].img2img.update_preview_frequency,
-																					 help="Frequency in steps at which the the preview image is updated. By default the frequency \
-															  is set to 1 step.")
+				st.session_state["update_preview_frequency"] = st.number_input("Update Image Preview Frequency",
+											       min_value=1,
+											       value=st.session_state['defaults'].img2img.update_preview_frequency,
+											       help="Frequency in steps at which the the preview image is updated. By default the frequency \
+											       is set to 1 step.")
 			#
 			with st.expander("Advanced"):
 				with st.expander("Output Settings"):
@@ -544,14 +546,14 @@ def layout():
 										st.session_state["LDSR_model"] = st.selectbox("LDSR model", st.session_state["LDSR_models"],
 																					  index=st.session_state["LDSR_models"].index(st.session_state['defaults'].general.LDSR_model))
 
-										st.session_state["ldsr_sampling_steps"] = int(st.text_input("Sampling Steps", value=st.session_state['defaults'].img2img.LDSR_config.sampling_steps,
-																									help=""))
+										st.session_state["ldsr_sampling_steps"] = st.number_input("Sampling Steps", value=st.session_state['defaults'].img2img.LDSR_config.sampling_steps,
+																									help="")
 
-										st.session_state["preDownScale"] = int(st.text_input("PreDownScale", value=st.session_state['defaults'].img2img.LDSR_config.preDownScale,
-																							 help=""))
+										st.session_state["preDownScale"] = st.number_input("PreDownScale", value=st.session_state['defaults'].img2img.LDSR_config.preDownScale,
+																							 help="")
 
-										st.session_state["postDownScale"] = int(st.text_input("postDownScale", value=st.session_state['defaults'].img2img.LDSR_config.postDownScale,
-																							  help=""))
+										st.session_state["postDownScale"] = st.number_input("postDownScale", value=st.session_state['defaults'].img2img.LDSR_config.postDownScale,
+																							  help="")
 
 										downsample_method_list = ['Nearest', 'Lanczos']
 										st.session_state["downsample_method"] = st.selectbox("Downsample Method", downsample_method_list,
@@ -685,7 +687,7 @@ def layout():
 					message.success('Render Complete: ' + info + '; Stats: ' + stats, icon="✅")
 
 				except (StopException, KeyError):
-					print(f"Received Streamlit StopException")
+					logger.info(f"Received Streamlit StopException")
 
 				# this will render all the images at the end of the generation but its better if its moved to a second tab inside col2 and shown as a gallery.
 				# use the current col2 first tab to show the preview_img and update it as its generated.
